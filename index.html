@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bioengineering Vital Monitor Game</title>
+<style>
+    body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: linear-gradient(180deg, #0b1e33, #0f355c);
+        color: white;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+    }
+
+    h1 {
+        margin-top: 20px;
+        text-shadow: 0 0 10px #66ccff;
+        animation: fadePulse 2s infinite;
+    }
+
+    #score, #money, #difficulty-display, #health-display {
+        margin-top: 5px;
+        font-size: 1.4em;
+        text-shadow: 0 0 8px #44ddff;
+    }
+
+    #event-banner {
+        margin-top: 10px;
+        font-size: 1.2em;
+        color: #ffdd55;
+        text-shadow: 0 0 10px #ffaa00;
+        height: 28px;
+        transition: opacity 0.5s;
+        opacity: 0;
+    }
+
+    #health-bar-container {
+        width: 90%;
+        max-width: 900px;
+        background: #444;
+        border-radius: 10px;
+        margin-top: 10px;
+        height: 20px;
+    }
+
+    #health-bar {
+        width: 100%;
+        height: 100%;
+        background: #0f0;
+        border-radius: 10px;
+        transition: width 0.3s, background 0.3s;
+    }
+
+    @keyframes fadePulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.6; }
+        100% { opacity: 1; }
+    }
+
+    #game-container {
+        margin-top: 20px;
+        width: 90%;
+        max-width: 900px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+
+    .vital {
+        background: #142942;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 0 20px rgba(0, 200, 255, 0.3);
+        position: relative;
+        transition: transform 0.2s;
+    }
+
+    .vital.danger {
+        box-shadow: 0 0 25px rgba(255, 50, 50, 0.9);
+        transform: scale(1.05);
+        animation: dangerPulse 0.4s infinite alternate;
+    }
+
+    @keyframes dangerPulse {
+        from { background: #3b0f0f; }
+        to { background: #5a0000; }
+    }
+
+    .label { font-size: 1.2em; margin-bottom: 10px; }
+    .value { font-size: 2.2em; font-weight: bold; }
+
+    button {
+        margin-top: 10px;
+        padding: 10px 20px;
+        background: #1e90ff;
+        border: none;
+        border-radius: 8px;
+        color: white;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.2s;
+    }
+
+    button:hover { background: #3aa0ff; transform: scale(1.05); }
+
+    #game-over {
+        z-index: 9999;
+        display: none;
+        position: absolute;
+        top: 40%;
+        font-size: 2em;
+        text-align: center;
+        text-shadow: 0 0 20px red;
+    }
+</style>
+</head>
+<body>
+<h1>Vital Stability Monitor</h1>
+<div id="score">Score: 0</div>
+<div id="money">Money: 0</div>
+<div id="difficulty-display">Difficulty: x1.00</div>
+<div id="health-display">HP: 100</div>
+<div id="health-bar-container"><div id="health-bar"></div></div>
+<div id="event-banner"></div>
+<div id="game-over">GAME OVER<br>Patient Unstable</div>
+
+<div id="game-container">
+    <div class="vital" id="heart">
+        <div class="label">Heart Rate</div>
+        <div class="value" id="heart-value">--</div>
+        <button onclick="stabilize('heart')">Stabilize</button>
+    </div>
+
+    <div class="vital" id="oxygen">
+        <div class="label">Blood Oxygen</div>
+        <div class="value" id="oxygen-value">--</div>
+        <button onclick="stabilize('oxygen')">Increase O₂</button>
+    </div>
+
+    <div class="vital" id="glucose">
+        <div class="label">Glucose</div>
+        <div class="value" id="glucose-value">--</div>
+        <button onclick="stabilize('glucose')">Regulate</button>
+    </div>
+
+    <div class="vital" id="temp">
+        <div class="label">Body Temp</div>
+        <div class="value" id="temp-value">--</div>
+        <button onclick="stabilize('temp')">Cool/Heat</button>
+    </div>
+</div>
+
+<button onclick="upgradeMoneyMultiplier()">Upgrade Money Multiplier (Cost: 100)</button>
+<button onclick="buyDifficultyHalve()">Buy Difficulty Halve (Cost: 500)</button>
+
+
+<audio id="alert-sound" src="/audio/error.mp3"></audio>
+<audio id="click-sound" src="/audio/ui-button-click.mp3"></audio>
+<audio id="gameover-sound" src="/audio/game-over-arcade.mp3"></audio>
+
+<script>
+let vitals = { heart: 80, oxygen: 98, glucose: 90, temp: 98.6 };
+let ranges = { heart: [60, 100], oxygen: [95, 100], glucose: [70, 110], temp: [97.5, 99.5] };
+let gameActive = true;
+let score = 0;
+let money = 0;
+let difficulty = 1;
+let startTime = Date.now();
+let difficultyHalveCount = 0;
+let hp = 100;
+let eventBanner = document.getElementById('event-banner');
+let stabilized = { heart: false, oxygen: false, glucose: false, temp: false };
+let moneyMultiply = 1;
+
+function updateScore(amount) {
+    score += amount;
+    document.getElementById('score').textContent = 'Score: ' + score;
+}
+
+function upgradeMoneyMultiplier(){
+    if(money >= 100){
+        money -= 100;
+        moneyMultiply += 1;
+    }
+}
+
+function updateMoney() {
+    let stabilizedCount = Object.values(vitals).filter((v,i)=> !document.getElementById(Object.keys(vitals)[i]).classList.contains('danger')).length;
+    let moneyGain = Math.max(0, 5 - stabilizedCount) * moneyMultiply;
+    money += moneyGain;
+    document.getElementById('money').textContent = 'Money: ' + money;
+}
+
+function showEvent(message) {
+    eventBanner.textContent = message;
+    eventBanner.style.opacity = 1;
+    setTimeout(() => { eventBanner.style.opacity = 0; }, 2000);
+}
+
+function triggerRandomEvent() {
+    if (!gameActive) return;
+    let chance = Math.random();
+    if (chance < 0.15) { vitals.heart += 20 * difficulty; showEvent('⚡ Sudden Heart Spike!'); }
+    else if (chance < 0.3) { vitals.oxygen -= 10 * difficulty; showEvent('🫁 Sensor Drop: O₂ Falling'); }
+    else if (chance < 0.45) { vitals.glucose += 25 * difficulty; showEvent('🍬 Glucose Surge!'); }
+    else if (chance < 0.6) { vitals.temp += 2 * difficulty; showEvent('🔥 Fever Spike!'); }
+}
+
+function updateVitals() {
+    if (!gameActive) return;
+    let elapsed = (Date.now() - startTime)/1000;
+    difficulty = elapsed > 5 ? 1 + (elapsed - 5)/30 : 1;
+    difficulty /= (1 + difficultyHalveCount * 0.5);
+
+    let damage = 0;
+    for (let key in vitals) {
+        // Only fluctuate if not stabilized
+        if (!stabilized[key]) {
+            vitals[key] += (Math.random() * 4 - 2) * difficulty;
+        }
+        document.getElementById(key+'-value').textContent = vitals[key].toFixed(1);
+        let vitalBox = document.getElementById(key);
+        let inRange = vitals[key] >= ranges[key][0] && vitals[key] <= ranges[key][1];
+        if (!inRange) {
+            vitalBox.classList.add('danger');
+            document.getElementById('alert-sound').play();
+            damage += Math.round(0.5*difficulty);
+        } else {
+            vitalBox.classList.remove('danger');
+            updateScore(1);
+        }
+    }
+
+    hp -= damage;
+    hp += 1;
+    if(hp > 100) hp = 100;
+    if(hp < 0) hp = 0;
+    document.getElementById('health-bar').style.width = hp + '%';
+    document.getElementById('health-bar').style.background = `rgb(${255*(1-hp/100)}, ${255*hp/100}, 0)`;
+    document.getElementById('health-display').textContent = 'HP: ' + hp;
+
+    updateMoney();
+    document.getElementById('difficulty-display').textContent = 'Difficulty: x' + difficulty.toFixed(2);
+    if(hp <= 0) endGame();
+}
+
+function stabilize(stat) {
+    if (!gameActive) return;
+    document.getElementById('click-sound').play();
+    let healthy = (ranges[stat][0] + ranges[stat][1]) / 2;
+    vitals[stat] = vitals[stat] + (healthy - vitals[stat]) * 0.5;
+    stabilized[stat] = true;
+    setTimeout(() => { stabilized[stat] = false; }, 3000); // lock for 3 seconds
+    updateScore(10);
+}
+
+function buyDifficultyHalve() {
+    if(money >= 500){
+        money -= 500;
+        difficultyHalveCount += 1;
+        document.getElementById('money').textContent = 'Money: ' + money;
+        showEvent('🛡 Difficulty Halved!');
+    }
+}
+
+function endGame() {
+    gameActive = false;
+    document.getElementById('game-over').style.display = 'block';
+    document.getElementById('gameover-sound').play();
+}
+
+setInterval(updateVitals, 700);
+setInterval(triggerRandomEvent, 3000);
+</script>
+</body>
+</html>
